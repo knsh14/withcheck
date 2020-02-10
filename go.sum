@@ -1,0 +1,3 @@
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/knsh14/templateutil v0.0.0-20200210115537-9c8f72d2d775 h1:K5AoEeDp40sSMemmQ8+B7/3m9bJ1HbgsMx/lCyKSqXQ=
+github.com/knsh14/templateutil v0.0.0-20200210115537-9c8f72d2d775/go.mod h1:tCF5LSBg9OewiLVY7lDrLW0t6PNQJlGCFCSkCeQyq/w=
