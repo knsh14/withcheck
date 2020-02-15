@@ -16,14 +16,24 @@ func TestCheck(t *testing.T) {
 		expect error
 	}{
 		{
-			title:  "simple",
-			input:  `{{ with .Foo}}{{.Foo}}{{end}}`,
+			title:  "field",
+			input:  `{{ with .Foo}}{{.}}{{end}}`,
 			expect: nil,
 		},
 		{
 			title:  "simple not found",
-			input:  `{{ with .Foo}}{{.Bar}}{{end}}`,
+			input:  `{{ with .Foo}}{{end}}`,
 			expect: ErrNotFound,
+		},
+		{
+			title:  "variable",
+			input:  `{{ with $x := "a" }}{{ $x }}{{end}}`,
+			expect: nil,
+		},
+		{
+			title:  "variable",
+			input:  `{{ with $x := "b" }}{{ . }}{{end}}`,
+			expect: nil,
 		},
 	}
 
@@ -49,23 +59,13 @@ func TestCheckVariables(t *testing.T) {
 	}{
 		{
 			input:  `{{.Foo}}`,
-			target: []string{".Foo"},
+			target: []string{"."},
 			expect: nil,
 		},
 		{
-			input:  `{{.Bar}}`,
-			target: []string{".Foo"},
+			input:  `hello world`,
+			target: []string{"."},
 			expect: ErrNotFound,
-		},
-		{
-			input:  `{{ .Foo }}{{ .Bar }}`,
-			target: []string{".Foo", ".Bar"},
-			expect: nil,
-		},
-		{
-			input:  `{{ .Bar }}`,
-			target: []string{".Foo", ".Bar"},
-			expect: nil,
 		},
 		{
 			input:  `{{ . }}`,
@@ -73,8 +73,23 @@ func TestCheckVariables(t *testing.T) {
 			expect: nil,
 		},
 		{
-			input:  `{{ template "hoge" }}`,
-			target: []string{"hoge"},
+			input:  `{{ .Foo }}`,
+			target: []string{"."},
+			expect: nil,
+		},
+		{
+			input:  `{{ $x := "a"}}{{ $x }}`,
+			target: []string{"$x", "."},
+			expect: nil,
+		},
+		{
+			input:  `{{ .Foo }}`,
+			target: []string{"$x"},
+			expect: ErrNotFound,
+		},
+		{
+			input:  `{{ $x := "b" }}{{ $x.Y }}`,
+			target: []string{"$x"},
 			expect: nil,
 		},
 	}
@@ -97,6 +112,7 @@ func TestGetVariable(t *testing.T) {
 	testcases := []struct {
 		input    string
 		expected []string
+		err      error
 	}{
 		{
 			input:    `{{ with . }}{{ .Foo }}{{ end }}`,
@@ -104,23 +120,24 @@ func TestGetVariable(t *testing.T) {
 		},
 		{
 			input:    `{{ with .Foo }}{{ .Foo }}{{ end }}`,
-			expected: []string{".Foo"},
+			expected: []string{"."},
 		},
 		{
 			input:    `{{ with .Foo | println "Bar" }}{{ .Foo }}{{ end }}`,
-			expected: []string{".Foo"},
+			expected: []string{"."},
 		},
 		{
 			input:    `{{ with .Foo .Bar | println "Bar" }}{{ .Foo }}{{ end }}`,
-			expected: []string{".Foo", ".Bar"},
+			expected: nil,
+			err:      ErrTooManyVariables,
 		},
 		{
 			input:    `{{ with $x := "huga" }}{{ $x }}{{ end }}`,
-			expected: []string{"$x"},
+			expected: []string{"$x", "."},
 		},
 		{
 			input:    `{{ with $x := "huga" | println "hoge" }}{{ $x }}{{ end }}`,
-			expected: []string{"$x"},
+			expected: []string{"$x", "."},
 		},
 	}
 
@@ -132,13 +149,16 @@ func TestGetVariable(t *testing.T) {
 			}
 			templateutil.Inspect(tpl.Tree.Root, func(n parse.Node) bool {
 				if node, ok := n.(*parse.WithNode); ok {
-					result := getVariable(node.Pipe)
+					result, err := getVariable(node.Pipe)
+					if err != tt.err {
+						t.Fatalf("error is unexpected. Actual:%s, Expected:%s", err, tt.err)
+					}
 					if len(result) != len(tt.expected) {
-						t.Fatalf("result is not matched to expected, Expected:%+v, Actual:%+v", tt.expected, result)
+						t.Fatalf("result num is unexpected. Actual:%d, Expected:%d", len(result), len(tt.expected))
 					}
 					for i := range result {
 						if result[i] != tt.expected[i] {
-							t.Errorf("value is not matched , Expected:%s, Actual:%s", tt.expected[i], result[i])
+							t.Fatalf("result is unexpected. Actual:%s, Expected:%s", result[i], tt.expected[i])
 						}
 					}
 				}

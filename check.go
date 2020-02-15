@@ -1,7 +1,7 @@
 package withcheck
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -11,7 +11,11 @@ import (
 
 var (
 	// ErrNotFound is error for variable is not used in with statement
-	ErrNotFound = fmt.Errorf("not found")
+	ErrNotFound = errors.New("not found")
+	// ErrTooManyVariables is error for is not used in with statement
+	ErrTooManyVariables = errors.New("too many variables")
+	// ErrInvalid is error for variable is not used in with statement
+	ErrInvalid = errors.New("invalid node")
 )
 
 // Check returns error if variable is unused in with statement or some error
@@ -22,11 +26,12 @@ func Check(tmpl *template.Template) error {
 			return false
 		}
 		if n, ok := node.(*parse.WithNode); ok {
-			v := getVariable(n.Pipe)
-			if len(v) == 0 {
+			v, e := getVariable(n.Pipe)
+			if err != nil {
+				err = e
 				return false
 			}
-			e := checkVariable(n.List, v)
+			e = checkVariable(n.List, v)
 			if e != nil {
 				err = e
 			}
@@ -38,7 +43,7 @@ func Check(tmpl *template.Template) error {
 }
 
 func checkVariable(list *parse.ListNode, variables []string) error {
-	found := false
+	var found bool
 	for _, target := range variables {
 		templateutil.Inspect(list, func(node parse.Node) bool {
 			f := false
@@ -49,15 +54,13 @@ func checkVariable(list *parse.ListNode, variables []string) error {
 			case *parse.IdentifierNode:
 				f = strings.HasPrefix(n.Ident, target)
 			case *parse.VariableNode:
-				v := "." + strings.Join(n.Ident, ".")
+				v := strings.Join(n.Ident, ".")
 				f = strings.HasPrefix(v, target)
 			case *parse.ChainNode:
 				v := "." + strings.Join(n.Field, ".")
 				f = strings.HasPrefix(v, target)
 			case *parse.DotNode:
 				f = target == "."
-			case *parse.TemplateNode:
-				f = n.Name == target
 			}
 			found = found || f
 			return true
@@ -69,26 +72,25 @@ func checkVariable(list *parse.ListNode, variables []string) error {
 	return ErrNotFound
 }
 
-func getVariable(n *parse.PipeNode) []string {
-	var names []string
+func getVariable(n *parse.PipeNode) ([]string, error) {
 	if len(n.Decl) > 0 {
-		for _, v := range n.Decl {
-			names = append(names, v.Ident...)
+		if len(n.Decl) > 1 {
+			return nil, ErrTooManyVariables
 		}
-		return names
+		return []string{n.Decl[0].Ident[0], "."}, nil
 	}
 	if len(n.Cmds) > 0 {
-		for _, cmd := range n.Cmds {
-			for _, arg := range cmd.Args {
-				switch node := arg.(type) {
-				case *parse.FieldNode:
-					names = append(names, "."+strings.Join(node.Ident, "."))
-				case *parse.DotNode:
-					names = append(names, ".")
-				}
-			}
+		args := n.Cmds[0].Args
+		if len(args) > 1 {
+			return nil, ErrTooManyVariables
 		}
-		return names
+		if _, ok := args[0].(*parse.FieldNode); ok {
+			return []string{"."}, nil
+		}
+		if _, ok := args[0].(*parse.DotNode); ok {
+			return []string{"."}, nil
+		}
+		return nil, ErrInvalid
 	}
-	return nil
+	return nil, ErrNotFound
 }
